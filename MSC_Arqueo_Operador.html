@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arqueo de Caja - Estación de Servicio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  :root{
+    --bg: #14181c;
+    --panel: #1c2228;
+    --panel2: #232b32;
+    --line: #323c44;
+    --text: #e8edf1;
+    --muted: #8ea0ac;
+    --ge: #e0483e;
+    --diesel: #f2b134;
+    --gnv: #3aa6d6;
+    --glp: #ff8a3d;
+    --cash: #c9a13b;
+    --pos: #6cb4e8;
+    --hist: #7f8fa6;
+    --led-bg: #0a0d0f;
+    --ok: #3ecf6e;
+    --bad: #ff5c5c;
+    --radius: 14px;
+  }
+  *{box-sizing:border-box;}
+  .share-overlay{ position:fixed; inset:0; background:rgba(0,0,0,0.55); display:flex; align-items:flex-end; justify-content:center; z-index:9999; }
+  .share-card{ background:var(--panel); border:1px solid var(--line); border-radius:16px 16px 0 0; padding:20px 18px 26px; width:100%; max-width:480px; box-shadow:0 -4px 20px rgba(0,0,0,0.4); }
+  .share-card h3{ margin:0 0 4px; font-size:15px; color:var(--text); }
+  .share-card p{ margin:0 0 16px; font-size:13px; color:var(--muted); word-break:break-all; }
+  .share-card .share-btns{ display:flex; gap:10px; }
+  .share-card button{ flex:1; padding:12px; font-size:14px; border-radius:10px; }
+  .share-btn-primary{ background:var(--pos); border:none; color:#0a0d0f; font-weight:700; }
+  .share-btn-secondary{ background:var(--panel2); border:1px solid var(--line); color:var(--text); }
+  body{ margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif; padding-bottom:40px; }
+  header{ padding:18px 16px 10px; text-align:center; border-bottom:1px solid var(--line); background:linear-gradient(180deg,#181d22,#14181c); }
+  header h1{ margin:0 0 6px; font-size:18px; letter-spacing:0.5px; font-weight:700; text-transform:uppercase; }
+  header h2{ margin:0 0 6px; font-size:14px; font-weight:600; color:var(--text); letter-spacing:0.5px; }
+  header p{ margin:0; color:var(--muted); font-size:12px; }
+  .meta-row{ display:flex; gap:10px; padding:12px 16px; flex-wrap:wrap; }
+  .meta-row .field{flex:1; min-width:130px;}
+  label{ display:block; font-size:11px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px; }
+  input, select, textarea{ width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 10px; font-size:16px; font-family:inherit; font-variant-numeric: tabular-nums; }
+  textarea{ resize:vertical; min-height:44px; }
+  input:focus, select:focus, textarea:focus{ outline:none; border-color:var(--fuel-color, #666); }
+  button{ background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+  button:active{ transform:scale(0.98); }
+  button.primary{ background:var(--fuel-color, var(--cash)); color:#14181c; border-color:var(--fuel-color, var(--cash)); }
+  button.danger-outline{ color:var(--bad); border-color:#5a2a2a; }
+  .selector-card{ margin:0 16px 14px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px; }
+  .selector-card label{margin-bottom:6px;}
+  .card{ margin:14px 16px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+  .card-head{ display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--line); border-left:4px solid var(--fuel-color); }
+  .card-head h2{ margin:0; font-size:14px; font-weight:700; }
+  .card-head .price-tag{ font-size:11px; color:var(--muted); text-align:right; line-height:1.4; }
+  .card-body{padding:12px 14px 16px;}
+  
+  .sub-box { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+  .sub-box-title { font-size:12px; font-weight:700; color:var(--text); margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+  
+  .dispenser{ background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+  .dispenser-title b{font-size:13px;}
+  .hoses{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px; }
+  .hose{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px; }
+  .hose-label{ font-size:11px; color:var(--fuel-color); font-weight:700; margin-bottom:6px; }
+  .hose-inputs{ display:flex; gap:6px; margin-bottom:6px; }
+  .hose-inputs .field{flex:1;}
+  .hose-inputs label{font-size:10px; margin-bottom:2px;}
+  .hose-result{ font-size:12px; color:var(--muted); text-align:right; }
+  .hose-result b{color:var(--text); font-variant-numeric: tabular-nums;}
+  .extra-row{ display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  .extra-row .field{flex:1; min-width:120px;}
+  .readout{ margin-top:12px; background:var(--led-bg); border-radius:10px; padding:12px 14px; display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; }
+  .readout .item{display:flex; flex-direction:column;}
+  .readout .item .k{font-size:10px; color:#5c6b74; text-transform:uppercase; letter-spacing:0.4px;}
+  .readout .item .v{ font-family:"Courier New", monospace; font-size:16px; font-weight:700; color:var(--fuel-color); font-variant-numeric: tabular-nums; }
+  .readout .item.total{grid-column:1/-1; border-top:1px dashed #2a333a; padding-top:8px; margin-top:2px;}
+  .readout .item.total .v{font-size:22px;}
+  .glp-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .denom-grid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin:10px 0; }
+  .denom-item label{ font-size:10px; margin-bottom:2px; }
+  .denom-item input{ padding:7px 8px; font-size:16px; }
+  .cash-subtotal{ display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin:4px 0; }
+  .cash-subtotal b{ font-family:"Courier New", monospace; color:var(--text); font-size:14px; }
+  .cash-subtotal.total-line{ border-top:1px dashed var(--line); padding-top:8px; margin-top:6px; color:var(--text); font-weight:700; }
+  .cash-subtotal.total-line b{ color:var(--cash); font-size:16px; }
+  .pos-field{ margin-top:10px; }
+  .diff-line{ display:flex; justify-content:space-between; align-items:center; background:var(--led-bg); border-radius:10px; padding:12px 14px; margin-top:10px; }
+  .diff-line .k{font-size:11px; color:var(--muted); text-transform:uppercase;}
+  .diff-line .v{font-family:"Courier New", monospace; font-size:20px; font-weight:700;}
+  .diff-ok{color:var(--ok);}
+  .diff-bad{color:var(--bad);}
+  .diff-zero{color:var(--muted);}
+  .action-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+  .action-row button{flex:1; min-width:130px;}
+  .hist-item{ display:flex; justify-content:space-between; align-items:center; gap:8px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:6px; font-size:12px; }
+  .hist-item .hist-info{color:var(--muted); overflow:hidden;}
+  .hist-item .hist-info b{color:var(--text);}
+  .hist-item .hist-diff{font-family:"Courier New", monospace; font-weight:700; white-space:nowrap;}
+  .hist-item .hist-del{ background:none; border:none; color:var(--bad); font-size:16px; padding:2px 6px; cursor:pointer; }
+  .hist-item .hist-export{ background:none; border:none; color:var(--pos); font-size:15px; padding:2px 6px; cursor:pointer; }
+  .empty-hist{color:var(--muted); font-size:12px; text-align:center; padding:10px;}
+  @media (max-width:360px){
+    .hoses{grid-template-columns:1fr;}
+    .glp-grid{grid-template-columns:1fr;}
+    .denom-grid{grid-template-columns:1fr 1fr;}
+  }
+  @media (max-width:600px){
+    .hose-inputs{ flex-direction:column; }
+    .hose-inputs .field{ width:100%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ESTACIÓN DE SERVICIO MARISCAL SUCRE</h1>
+  <h2>ARQUEO DE CAJA</h2>
+  <p>Gasolina · Diesel Oil · GNV · GLP</p>
+</header>
+
+<div class="selector-card">
+  <div class="meta-row" style="padding:0; margin-bottom:10px;">
+    <div class="field"><label>Fecha</label><input type="date" id="fecha"></div>
+    <div class="field"><label>Turno</label>
+      <select id="turno"><option>Mañana</option><option>Tarde</option><option>Noche</option></select>
+    </div>
+  </div>
+  <label>Selecciona tu producto / dispensador</label>
+  <select id="producto-select">
+    <option value="ge1">GE1 — Gasolina</option>
+    <option value="ge2">GE2 — Gasolina</option>
+    <option value="diesel">Diesel oil</option>
+    <option value="gnv">GNV</option>
+    <option value="glp">GLP — garrafas</option>
+  </select>
+</div>
+
+<div id="panel-container"></div>
+
+<div class="card" style="--fuel-color:var(--hist)">
+  <div class="card-head">
+    <h2>Historial de arqueos</h2>
+    <div class="price-tag">Guardado en este teléfono</div>
+  </div>
+  <div class="card-body">
+    <div class="action-row">
+      <button id="btn-exportar">Exportar resumen (Excel)</button>
+      <button id="btn-exportar-operador">Exportar Planilla Consolidada (Formato Operador)</button>
+      <button class="danger-outline" id="btn-borrar">Borrar historial</button>
+    </div>
+    <div id="hist-list" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<script>
+const PRECIOS = {
+  ge:     { nac: 6.96, intl: 8.68 },
+  diesel: { nac: 9.80, intl: 9.98 },
+  gnv:    { nac: 2.73, intl: 2.92 },
+  glp:    { nac: 22.50 }
+};
+const DENOMS = [200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1];
+const HIST_KEY = 'arqueo_historial_v4';
+
+const PRODUCTOS = {
+  ge1:    { label:'GE1 — Gasolina especial', color:'var(--ge)', unit:'L', precio:PRECIOS.ge, dispensers:[{id:'GE1', hoses:['A','B']}] },
+  ge2:    { label:'GE2 — Gasolina especial', color:'var(--ge)', unit:'L', precio:PRECIOS.ge, dispensers:[{id:'GE2', hoses:['A','B']}] },
+  diesel: { label:'Diesel oil', color:'var(--diesel)', unit:'L', precio:PRECIOS.diesel, dispensers:[{id:'D1', hoses:['A','B']}] },
+  gnv:    { label:'GNV', color:'var(--gnv)', unit:'m³', precio:PRECIOS.gnv, hasCalibracion: false, dispensers:[{id:'GNV1', hoses:['A','B']},{id:'GNV2', hoses:['A','B']}] },
+  glp:    { label:'GLP — garrafas 10 kg', color:'var(--glp)', unit:'garrafas', isGLP:true, precio:PRECIOS.glp }
+};
+
+document.getElementById('fecha').valueAsDate = new Date();
+
+function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function fmt(n, unit, decimals = 2){ return n.toLocaleString('es-BO', {minimumFractionDigits:decimals, maximumFractionDigits:decimals}) + (unit ? ' ' + unit : ''); }
+
+function denomGridHtml(){
+  let h = '';
+  DENOMS.forEach(d => { 
+    let label = d % 1 !== 0 ? d.toFixed(2) : d;
+    h += `<div class="denom-item"><label>Bs ${label}</label><input type="number" min="0" step="1" data-denom="${d}" value="0"></div>`; 
+  });
+  return h;
+}
+
+function renderPanel(key){
+  const p = PRODUCTOS[key];
+  const container = document.getElementById('panel-container');
+  let dispensersHtml = '';
+  if (!p.isGLP){
+    p.dispensers.forEach(d => {
+      let hosesHtml = '';
+      d.hoses.forEach(h => {
+        hosesHtml += `
+        <div class="hose" data-hose="${h}">
+          <div class="hose-label">Manguera ${h}</div>
+          <div class="hose-inputs">
+            <div class="field"><label>Inicial</label><input type="number" step="0.001" data-role="ini"></div>
+            <div class="field"><label>Final</label><input type="number" step="0.001" data-role="fin"></div>
+          </div>
+          <div class="hose-result">${p.unit}: <b data-role="litros">0.000</b></div>
+        </div>`;
+      });
+      dispensersHtml += `<div class="dispenser" data-disp="${d.id}"><div class="dispenser-title"><b>Dispensador ${d.id}</b></div><div class="hoses">${hosesHtml}</div></div>`;
+    });
+  }
+
+  let bodyHtml = '';
+  if (p.isGLP){
+    bodyHtml = `
+      <div class="field" style="margin-bottom:12px; background:var(--led-bg); padding:10px; border-radius:8px;">
+        <label style="color:var(--glp);">STOCK TOTAL DE GARRAFAS EN ESTACIÓN (Manual)</label>
+        <input type="number" step="1" id="f-stock-total" placeholder="Ej: 400" value="" style="border:1px solid var(--glp);">
+      </div>
+      
+      <div class="sub-box">
+        <div class="sub-box-title">SALDO INICIAL <span id="warn-ini" style="color:var(--bad); font-size:10px; display:none;">⚠️ Descuadre en stock</span></div>
+        <div class="glp-grid">
+          <div class="field"><label>Llenas (incl. mal estado)</label><input type="number" step="1" id="f-ini-llenas" value="0"></div>
+          <div class="field"><label>Vacías</label><input type="number" step="1" id="f-ini-vacias" value="0"></div>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:12px;">
+        <label>Recepción de garrafas llenas (Camión)</label>
+        <input type="number" step="1" id="f-recep" value="0">
+      </div>
+
+      <div class="sub-box">
+        <div class="sub-box-title">SALDO FINAL <span id="warn-fin" style="color:var(--bad); font-size:10px; display:none;">⚠️ Descuadre en stock</span></div>
+        <div class="glp-grid">
+          <div class="field"><label>Llenas (incl. mal estado)</label><input type="number" step="1" id="f-fin-llenas" value="0"></div>
+          <div class="field"><label>Vacías</label><input type="number" step="1" id="f-fin-vacias" value="0"></div>
+        </div>
+      </div>
+
+      <div class="sub-box">
+        <div class="sub-box-title" style="color:var(--glp);">CONTROL DE FACTURAS (Talonario)</div>
+        <div class="glp-grid">
+          <div class="field"><label>Nº Factura Inicial</label><input type="number" step="1" id="f-fact-ini" placeholder="Ej: 1500"></div>
+          <div class="field"><label>Nº Factura Final</label><input type="text" id="r-fact-fin" readonly placeholder="-" style="background:var(--led-bg); border-color:var(--line); color:var(--glp); font-weight:700; font-family:'Courier New', monospace;"></div>
+        </div>
+        <div style="font-size:10px; color:var(--muted); margin-top:6px;">* Se calcula automáticamente: es el número con el que debe empezar el siguiente turno.</div>
+      </div>
+
+      <div class="readout">
+        <div class="item"><span class="k">Garrafas vendidas</span><span class="v" id="r-vendidas">0</span></div>
+        <div class="item total"><span class="k">Total a cobrar</span><span class="v" id="r-total">0.00 Bs</span></div>
+      </div>`;
+  } else {
+    const unitWord = p.unit === 'L' ? 'Litros' : 'm³';
+    const hasCalibracion = p.hasCalibracion !== false;
+    const calibracionHtml = hasCalibracion ? `<div class="field"><label>${unitWord} en calibración</label><input type="number" step="0.001" id="f-calibracion" value="0"></div>` : '';
+    
+    bodyHtml = `
+      ${dispensersHtml}
+      <div class="extra-row">
+        <div class="field"><label>${unitWord} en vales (propio/prepago)</label><input type="number" step="0.001" id="f-vales" value="0"></div>
+        ${calibracionHtml}
+        <div class="field"><label>${unitWord} a precio intl.</label><input type="number" step="0.001" id="f-intl" value="0"></div>
+      </div>
+      <div class="readout">
+        <div class="item"><span class="k">Total despachado</span><span class="v" id="r-total-litros">0.000</span></div>
+        <div class="item"><span class="k">Neto (− vales ${hasCalibracion ? '− calib.' : ''})</span><span class="v" id="r-neto-litros">0.000</span></div>
+        <div class="item"><span class="k">Monto a precio nacional</span><span class="v" id="r-monto-nac">0.00 Bs</span></div>
+        <div class="item"><span class="k">Monto diferencial intl.</span><span class="v" id="r-monto-dif">0.00 Bs</span></div>
+        <div class="item total">
+          <span class="k">Total a cobrar <span id="r-exacto" style="font-size:9px; font-weight:normal; color:var(--muted); text-transform:none;"></span></span>
+          <span class="v" id="r-total">0.00 Bs</span>
+        </div>
+      </div>`;
+  }
+
+  container.innerHTML = `
+    <div class="card" style="--fuel-color:${p.color}">
+      <div class="card-head">
+        <h2>${p.label}</h2>
+        <div class="price-tag">${p.isGLP ? 'Precio: 22.50 Bs/garrafa' : 'Nacional: ' + p.precio.nac.toFixed(2) + ' Bs<br>Internacional: ' + p.precio.intl.toFixed(2) + ' Bs'}</div>
+      </div>
+      <div class="card-body">
+        ${bodyHtml}
+        <div style="margin-top:14px;">
+          <label>Nombre del trabajador</label>
+          <input placeholder="Tu nombre" id="f-nombre">
+        </div>
+        <label style="margin-top:10px;">Corte de efectivo — billetes y monedas</label>
+        <div class="denom-grid">${denomGridHtml()}</div>
+        <div class="cash-subtotal"><span>Efectivo (billetes/monedas)</span><b id="r-efectivo">0.00 Bs</b></div>
+        <div class="pos-field">
+          <label>POS</label>
+          <input type="number" step="0.01" id="f-pos" value="0">
+        </div>
+        <div class="cash-subtotal total-line"><span>Total contado (efectivo + POS)</span><b id="r-total-contado">0.00 Bs</b></div>
+        <div class="diff-line">
+          <span class="k" id="diff-label">Diferencia</span>
+          <span class="v diff-zero" id="r-diff">0.00 Bs</span>
+        </div>
+        <label style="margin-top:10px;">Motivo de faltante (si corresponde)</label>
+        <textarea placeholder="Explique aquí si su corte no coincide con lo esperado" id="f-justif"></textarea>
+        <div class="action-row">
+          <button class="primary" id="btn-guardar">Guardar mi arqueo</button>
+          <button id="btn-exportar-actual">Exportar este arqueo (Excel)</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  recalcPanel(key);
+  document.getElementById('btn-guardar').addEventListener('click', () => guardarArqueo(key));
+  document.getElementById('btn-exportar-actual').addEventListener('click', () => exportarArqueoActual(key));
+}
+
+function recalcPanel(key){
+  const p = PRODUCTOS[key];
+  let esperado = 0;
+  let stockTotal = null, iniLlenas = 0, iniVacias = 0, recep = 0, finLlenas = 0, finVacias = 0, vendidas = 0;
+  let totalUnidades = 0, neto = 0, vales = 0, calibracion = 0, intl = 0, montoNac = 0, montoDif = 0, montoExacto = 0;
+
+  if (p.isGLP){
+    const stockInput = document.getElementById('f-stock-total').value;
+    stockTotal = stockInput === "" ? null : num(stockInput);
+    
+    iniLlenas = num(document.getElementById('f-ini-llenas').value);
+    iniVacias = num(document.getElementById('f-ini-vacias').value);
+    recep = num(document.getElementById('f-recep').value);
+    finLlenas = num(document.getElementById('f-fin-llenas').value);
+    finVacias = num(document.getElementById('f-fin-vacias').value);
+
+    if (stockTotal !== null && stockTotal > 0) {
+      document.getElementById('warn-ini').style.display = ((iniLlenas + iniVacias) !== stockTotal) ? 'block' : 'none';
+      document.getElementById('warn-fin').style.display = ((finLlenas + finVacias) !== stockTotal) ? 'block' : 'none';
+    } else {
+      document.getElementById('warn-ini').style.display = 'none';
+      document.getElementById('warn-fin').style.display = 'none';
+    }
+
+    vendidas = iniLlenas + recep - finLlenas;
+    if (vendidas < 0) vendidas = 0;
+    esperado = vendidas * p.precio.nac;
+    
+    document.getElementById('r-vendidas').textContent = vendidas.toLocaleString('es-BO');
+    document.getElementById('r-total').textContent = fmt(esperado, 'Bs');
+
+    const factIniInput = document.getElementById('f-fact-ini').value;
+    const factFinEl = document.getElementById('r-fact-fin');
+    if(factIniInput !== "") {
+        factFinEl.value = num(factIniInput) + vendidas;
+    } else {
+        factFinEl.value = "";
+    }
+
+  } else {
+    document.querySelectorAll('#panel-container .hose').forEach(hose => {
+      const ini = num(hose.querySelector('[data-role="ini"]').value);
+      const fin = num(hose.querySelector('[data-role="fin"]').value);
+      let u = fin - ini;
+      if (u < 0) u = 0;
+      u = Math.round(u * 1000) / 1000;
+      hose.querySelector('[data-role="litros"]').textContent = fmt(u, null, 3);
+      totalUnidades += u;
+    });
+    totalUnidades = Math.round(totalUnidades * 1000) / 1000;
+    vales = num(document.getElementById('f-vales').value);
+    calibracion = document.getElementById('f-calibracion') ? num(document.getElementById('f-calibracion').value) : 0;
+    intl = num(document.getElementById('f-intl').value);
+    
+    neto = Math.max(totalUnidades - vales - calibracion, 0);
+    neto = Math.round(neto * 1000) / 1000;
+    montoNac = neto * p.precio.nac;
+    const dfe = p.precio.intl - p.precio.nac;
+    montoDif = intl * dfe;
+    
+    montoExacto = montoNac + montoDif;
+    
+    esperado = Math.ceil(montoExacto * 10) / 10;
+    
+    document.getElementById('r-total-litros').textContent = fmt(totalUnidades, p.unit, 3);
+    document.getElementById('r-neto-litros').textContent = fmt(neto, p.unit, 3);
+    document.getElementById('r-monto-nac').textContent = fmt(montoNac, 'Bs');
+    document.getElementById('r-monto-dif').textContent = fmt(montoDif, 'Bs');
+    document.getElementById('r-exacto').textContent = `(Monto exacto: ${fmt(montoExacto, 'Bs')})`;
+    document.getElementById('r-total').textContent = fmt(esperado, 'Bs');
+  }
+
+  let efectivo = 0;
+  document.querySelectorAll('#panel-container [data-denom]').forEach(inp => {
+    efectivo += num(inp.value) * parseFloat(inp.dataset.denom);
+  });
+  const pos = num(document.getElementById('f-pos').value);
+  const totalContado = efectivo + pos;
+  document.getElementById('r-efectivo').textContent = fmt(efectivo, 'Bs');
+  document.getElementById('r-total-contado').textContent = fmt(totalContado, 'Bs');
+
+  const diff = totalContado - esperado;
+  const diffEl = document.getElementById('r-diff');
+  const label = document.getElementById('diff-label');
+  diffEl.classList.remove('diff-ok','diff-bad','diff-zero');
+  if (Math.abs(diff) < 0.01){ diffEl.classList.add('diff-zero'); label.textContent='Diferencia'; diffEl.textContent = fmt(0,'Bs'); }
+  else if (diff > 0){ diffEl.classList.add('diff-ok'); label.textContent='Sobrante'; diffEl.textContent = fmt(diff,'Bs'); }
+  else { diffEl.classList.add('diff-bad'); label.textContent='Faltante'; diffEl.textContent = fmt(Math.abs(diff),'Bs'); }
+
+  return {esperado, efectivo, pos, totalContado, diff,
+    totalUnidades, neto, vales, calibracion, intl, montoNac, montoDif, montoExacto,
+    stockTotal, iniLlenas, iniVacias, recep, finLlenas, finVacias, vendidas};
+}
+
+document.getElementById('panel-container').addEventListener('input', () => {
+  recalcPanel(document.getElementById('producto-select').value);
+});
+
+function esCampoEscribible(el){
+  return !!el && el.tagName === 'INPUT' && !el.readOnly && !el.disabled && el.type !== 'hidden';
+}
+
+document.body.addEventListener('focusin', function(e){
+  if (esCampoEscribible(e.target)){
+    try { e.target.select(); } catch(err){}
+  }
+});
+
+document.body.addEventListener('keydown', function(e){
+  if (e.key !== 'Enter') return;
+  if (!esCampoEscribible(e.target)) return;
+  e.preventDefault();
+  const campos = Array.from(document.querySelectorAll('input')).filter(esCampoEscribible);
+  const idx = campos.indexOf(e.target);
+  const next = campos[idx + 1];
+  if (next){
+    next.focus();
+  } else {
+    e.target.blur();
+  }
+});
+
+document.getElementById('producto-select').addEventListener('change', function(){
+  renderPanel(this.value);
+});
+
+renderPanel('ge1');
+
+function loadHistorial(){ try { return JSON.parse(localStorage.getItem(HIST_KEY)) || []; } catch(e){ return []; } }
+function saveHistorial(arr){ localStorage.setItem(HIST_KEY, JSON.stringify(arr)); }
+
+function construirEntryDesdeFormulario(key){
+  const p = PRODUCTOS[key];
+  let factInicial = '';
+  let factFinal = '';
+
+  if(p.isGLP) {
+     const stockInput = document.getElementById('f-stock-total').value;
+     if(!stockInput || num(stockInput) === 0) {
+        alert("Por favor, ingresa el stock total manual de garrafas antes de continuar.");
+        document.getElementById('f-stock-total').focus();
+        return null;
+     }
+     factInicial = document.getElementById('f-fact-ini').value;
+     factFinal = document.getElementById('r-fact-fin').value;
+  }
+
+  const nombreInput = document.getElementById('f-nombre');
+  const nombre = nombreInput.value.trim();
+  if (!nombre){
+    alert('El nombre del operador es obligatorio. Por favor, ingrésalo antes de continuar.');
+    nombreInput.focus();
+    return null;
+  }
+
+  const calc = recalcPanel(key);
+
+  const justifInput = document.getElementById('f-justif');
+  const justificacion = justifInput.value.trim();
+  if (calc.diff < -0.01 && !justificacion){
+    alert('Hay un faltante de efectivo. El motivo del faltante es obligatorio antes de continuar.');
+    justifInput.focus();
+    return null;
+  }
+
+  const hoses = [];
+  document.querySelectorAll('#panel-container .dispenser').forEach(disp => {
+    const dispId = disp.dataset.disp;
+    disp.querySelectorAll('.hose').forEach(hose => {
+      const lado = hose.dataset.hose;
+      const ini = num(hose.querySelector('[data-role="ini"]').value);
+      const fin = num(hose.querySelector('[data-role="fin"]').value);
+      hoses.push({ dispensador: dispId, lado, inicial: ini, final: fin, litros: Math.round(Math.max(fin - ini, 0) * 1000) / 1000 });
+    });
+  });
+
+  const denominaciones = [];
+  document.querySelectorAll('#panel-container [data-denom]').forEach(inp => {
+    const denom = parseFloat(inp.dataset.denom);
+    const cantidad = num(inp.value);
+    denominaciones.push({ denom, cantidad, importe: cantidad * denom });
+  });
+
+  const PRODUCTO_CODIGO = { ge1:'GE', ge2:'GE', diesel:'DI', gnv:'GNV', glp:'GLP' };
+
+  const entry = {
+    fecha: document.getElementById('fecha').value,
+    turno: document.getElementById('turno').value,
+    producto: key,
+    productoCodigo: PRODUCTO_CODIGO[key] || key.toUpperCase(),
+    productoLabel: p.label,
+    nombre: nombre,
+    esperado: calc.esperado,
+    efectivo: calc.efectivo,
+    pos: calc.pos,
+    totalContado: calc.totalContado,
+    diff: calc.diff,
+    justificacion: justificacion,
+    factInicial: factInicial,
+    factFinal: factFinal,
+    guardadoEn: new Date().toISOString(),
+    precioNac: p.precio.nac,
+    precioIntl: p.precio.intl,
+    hasCalibracion: p.hasCalibracion !== false,
+    hoses: hoses,
+    vales: calc.vales,
+    calibracion: calc.calibracion,
+    intlLitros: calc.intl,
+    totalUnidades: calc.totalUnidades,
+    neto: calc.neto,
+    montoNac: calc.montoNac,
+    montoDif: calc.montoDif,
+    denominaciones: denominaciones,
+    glp: p.isGLP ? {
+      stockTotal: calc.stockTotal,
+      iniLlenas: calc.iniLlenas,
+      iniVacias: calc.iniVacias,
+      recep: calc.recep,
+      finLlenas: calc.finLlenas,
+      finVacias: calc.finVacias,
+      vendidas: calc.vendidas
+    } : null
+  };
+
+  return entry;
+}
+
+function guardarArqueo(key){
+  const entry = construirEntryDesdeFormulario(key);
+  if (!entry) return;
+  const hist = loadHistorial();
+  hist.push(entry);
+  saveHistorial(hist);
+  renderHistorial();
+  alert('Arqueo de ' + entry.productoLabel + ' guardado en el historial de este teléfono.');
+}
+
+async function exportarArqueoActual(key){
+  const entry = construirEntryDesdeFormulario(key);
+  if (!entry) return;
+  await exportarArqueoIndividual(entry);
+}
+
+function renderHistorial(){
+  const list = document.getElementById('hist-list');
+  const hist = loadHistorial();
+  list.innerHTML = '';
+  if (hist.length === 0){ list.innerHTML = '<div class="empty-hist">Aún no hay arqueos guardados en este teléfono.</div>'; return; }
+  hist.slice().reverse().forEach((entry, revIdx) => {
+    const idx = hist.length - 1 - revIdx;
+    const div = document.createElement('div');
+    div.className = 'hist-item';
+    const diffClass = Math.abs(entry.diff) < 0.01 ? 'diff-zero' : (entry.diff > 0 ? 'diff-ok' : 'diff-bad');
+    const diffText = Math.abs(entry.diff) < 0.01 ? 'OK' : (entry.diff > 0 ? '+' + fmt(entry.diff) : '-' + fmt(Math.abs(entry.diff)));
+    div.innerHTML = `
+      <div class="hist-info"><b>${entry.fecha}</b> · ${entry.turno} · ${entry.productoLabel} · ${entry.nombre}</div>
+      <div class="hist-diff ${diffClass}">${diffText}</div>
+      <button class="hist-export" data-idx="${idx}" title="Descargar Excel de este arqueo">⬇</button>
+      <button class="hist-del" data-idx="${idx}" aria-label="Eliminar">×</button>
+    `;
+    list.appendChild(div);
+  });
+}
+
+document.getElementById('hist-list').addEventListener('click', function(e){
+  if (e.target.classList.contains('hist-del')){
+    const idx = parseInt(e.target.dataset.idx);
+    const hist = loadHistorial();
+    hist.splice(idx, 1);
+    saveHistorial(hist);
+    renderHistorial();
+  }
+  if (e.target.classList.contains('hist-export')){
+    const idx = parseInt(e.target.dataset.idx);
+    const hist = loadHistorial();
+    const entry = hist[idx];
+    if (entry) exportarArqueoIndividual(entry);
+  }
+});
+
+document.getElementById('btn-borrar').addEventListener('click', function(){
+  if (confirm('¿Borrar todo el historial guardado en este teléfono? Esta acción no se puede deshacer.')){
+    localStorage.removeItem(HIST_KEY);
+    renderHistorial();
+  }
+});
+
+document.getElementById('btn-exportar').addEventListener('click', async function(){
+  const hist = loadHistorial();
+  if (hist.length === 0){ alert('No hay arqueos guardados para exportar.'); return; }
+  const rows = hist.map(e => ({
+    'Fecha': e.fecha,
+    'Turno': e.turno,
+    'Producto': e.productoLabel,
+    'Trabajador': e.nombre,
+    'Total esperado (Bs)': Number(e.esperado.toFixed(2)),
+    'Efectivo billetes/monedas (Bs)': Number(e.efectivo.toFixed(2)),
+    'POS (Bs)': Number((e.pos||0).toFixed(2)),
+    'Total contado (Bs)': Number((e.totalContado != null ? e.totalContado : e.efectivo).toFixed(2)),
+    'Diferencia (Bs)': Number(e.diff.toFixed(2)),
+    'Justificacion': e.justificacion || '',
+    'Factura Inicial (GLP)': e.factInicial || '',
+    'Factura Final (GLP)': e.factFinal || ''
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:11},{wch:9},{wch:22},{wch:18},{wch:16},{wch:20},{wch:10},{wch:14},{wch:12},{wch:30},{wch:18},{wch:18}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Historial');
+  const filename = 'historial_arqueo_' + new Date().toISOString().slice(0,10) + '.xlsx';
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  await descargarBlob(blob, filename);
+  await ofrecerCompartir(blob, filename);
+});
+
+function round2(n){
+  if (n === undefined || n === null || n === '') return '';
+  const v = Number(n);
+  return isNaN(v) ? '' : Number(v.toFixed(2));
+}
+
+function round3(n){
+  if (n === undefined || n === null || n === '') return '';
+  const v = Number(n);
+  return isNaN(v) ? '' : Number(v.toFixed(3));
+}
+
+const STATION_CODE = 'MSC';
+
+function fechaDDMMYYYY(fechaISO){
+  if (!fechaISO) return '';
+  const partes = fechaISO.split('-');
+  if (partes.length !== 3) return fechaISO;
+  const [y,m,d] = partes;
+  return `${d}-${m}-${y}`;
+}
+
+function sanitizeNombre(n){
+  if (!n) return 'Operador';
+  return n.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'') || 'Operador';
+}
+
+async function descargarBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function ofrecerCompartir(blob, filename){
+  const overlay = document.createElement('div');
+  overlay.className = 'share-overlay';
+  overlay.innerHTML = `
+    <div class="share-card">
+      <h3>Excel exportado y descargado ✅</h3>
+      <p>${filename}</p>
+      <p style="font-size:12px;">Los navegadores no permiten compartir archivos Excel directamente desde la página. Para enviarlo por WhatsApp, correo, etc: abre tu app <b>Archivos</b> o la carpeta <b>Descargas</b>, busca el archivo de arriba, y usa el botón "Compartir" de esa app.</p>
+      <div class="share-btns">
+        <button class="share-btn-primary" id="share-btn-cerrar" style="flex:1 1 100%;">Entendido</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('share-btn-cerrar').addEventListener('click', () => {
+    if (overlay.parentNode) document.body.removeChild(overlay);
+  });
+}
+
+async function descargarWorkbook(workbook, filename){
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  await descargarBlob(blob, filename);
+  await ofrecerCompartir(blob, filename);
+}
+
+const COL = {
+  GREEN: 'FF92D050',
+  PINK: 'FFE5B8B7',
+  YELLOW_SOFT: 'FFFFFF99',
+  BLUE: 'FF5B9BD5',
+  YELLOW: 'FFFFFF00'
+};
+
+function wcell(ws, row, col, value, opts={}){
+  const cell = ws.getCell(row, col);
+  cell.value = (value === undefined) ? '' : value;
+  cell.font = { bold: !!opts.bold, size: opts.size || 11, name: 'Calibri' };
+  cell.alignment = { horizontal: opts.align || 'center', vertical: 'middle', wrapText: true };
+  const bstyle = opts.border === false ? undefined : (opts.border || 'thin');
+  if (bstyle){
+    cell.border = { top:{style:bstyle}, left:{style:bstyle}, bottom:{style:bstyle}, right:{style:bstyle} };
+  }
+  if (opts.fill){
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:opts.fill} };
+  }
+  if (opts.numFmt) cell.numFmt = opts.numFmt;
+  return cell;
+}
+
+function labelRow(ws, state, colBase, label, value, opts={}){
+  const row = state.row;
+  ws.mergeCells(row, colBase, row, colBase+1);
+  wcell(ws, row, colBase, label, { bold:true, fill: opts.fill || COL.PINK });
+  wcell(ws, row, colBase+2, value, { bold: !!opts.valueBold, fill: opts.valueFill || null, numFmt: opts.numFmt });
+  state.row++;
+}
+
+function sectionHeader(ws, state, colBase, text, opts={}){
+  const row = state.row;
+  ws.mergeCells(row, colBase, row, colBase+2);
+  wcell(ws, row, colBase, text, { bold:true, size:12, fill: opts.fill || COL.BLUE });
+  state.row++;
+}
+
+function tableHeader(ws, state, colBase, a, b, c){
+  const row = state.row;
+  wcell(ws, row, colBase, a, { bold:true, fill: COL.YELLOW_SOFT });
+  wcell(ws, row, colBase+1, b, { bold:true, fill: COL.YELLOW_SOFT });
+  wcell(ws, row, colBase+2, c, { bold:true, fill: COL.YELLOW_SOFT });
+  state.row++;
+}
+
+function dataRow(ws, state, colBase, a, b, c, opts={}){
+  const row = state.row;
+  wcell(ws, row, colBase, a, { fill: opts.fillA !== undefined ? opts.fillA : opts.fill, numFmt: opts.numFmtA });
+  wcell(ws, row, colBase+1, b, { fill: opts.fillB, numFmt: opts.numFmtB });
+  wcell(ws, row, colBase+2, c, { fill: opts.fillC, numFmt: opts.numFmtC });
+  state.row++;
+}
+
+function blankRow(state){ state.row++; }
+
+function buildBloqueStyled(ws, state, colBase, e){
+  labelRow(ws, state, colBase, 'FECHA', e.fecha);
+  labelRow(ws, state, colBase, 'TURNO', e.turno);
+  labelRow(ws, state, colBase, 'NOMBRE', e.nombre);
+  labelRow(ws, state, colBase, 'PRODUCTO', e.productoCodigo || e.producto);
+
+  if (e.producto === 'glp'){
+    labelRow(ws, state, colBase, 'PRECIO', round2(e.precioNac), { numFmt:'0.00' });
+    blankRow(state);
+    labelRow(ws, state, colBase, 'STOCK TOTAL', e.glp ? e.glp.stockTotal : '');
+    blankRow(state);
+    sectionHeader(ws, state, colBase, 'SALDO INICIAL');
+    labelRow(ws, state, colBase, 'LLENAS', e.glp ? e.glp.iniLlenas : '');
+    labelRow(ws, state, colBase, 'VACÍAS', e.glp ? e.glp.iniVacias : '');
+    labelRow(ws, state, colBase, 'RECEPCIÓN (camión)', e.glp ? e.glp.recep : '');
+    sectionHeader(ws, state, colBase, 'SALDO FINAL');
+    labelRow(ws, state, colBase, 'LLENAS', e.glp ? e.glp.finLlenas : '');
+    labelRow(ws, state, colBase, 'VACÍAS', e.glp ? e.glp.finVacias : '');
+    blankRow(state);
+    labelRow(ws, state, colBase, 'GARRAFAS VENDIDAS', e.glp ? e.glp.vendidas : '', { fill: COL.YELLOW_SOFT });
+    labelRow(ws, state, colBase, 'TOTAL A COBRAR Bs.', round2(e.esperado), { fill: COL.YELLOW, valueBold:true, valueFill: COL.YELLOW, numFmt:'0.00' });
+    blankRow(state);
+    labelRow(ws, state, colBase, 'FACTURA INICIAL', e.factInicial);
+    labelRow(ws, state, colBase, 'FACTURA FINAL', e.factFinal);
+  } else {
+    labelRow(ws, state, colBase, 'PRECIO NAC.', round2(e.precioNac), { numFmt:'0.00' });
+    labelRow(ws, state, colBase, 'PRECIO INTER.', round2(e.precioIntl), { numFmt:'0.00' });
+    blankRow(state);
+    sectionHeader(ws, state, colBase, 'MITERS ' + ((e.hoses && e.hoses[0]) ? e.hoses[0].dispensador : (e.productoCodigo||'')));
+    tableHeader(ws, state, colBase, 'LADO','INICIAL','FINAL');
+    (e.hoses||[]).forEach(h => dataRow(ws, state, colBase, h.lado, round3(h.inicial), round3(h.final), { fillA: COL.PINK, numFmtB: '0.000', numFmtC: '0.000' }));
+    blankRow(state);
+    labelRow(ws, state, colBase, 'VALES LTS', round3(e.vales), { fill: COL.YELLOW_SOFT, numFmt:'0.000' });
+    if (e.hasCalibracion) labelRow(ws, state, colBase, 'CALIBRACIÓN LTS', round3(e.calibracion), { fill: COL.YELLOW_SOFT, numFmt:'0.000' });
+    labelRow(ws, state, colBase, 'TOTAL', round3((e.vales||0) + (e.calibracion||0)), { fill: COL.PINK, valueBold:true, numFmt:'0.000' });
+    blankRow(state);
+    labelRow(ws, state, colBase, 'INTERNACIONAL LTS', round3(e.intlLitros), { fill: COL.YELLOW_SOFT, numFmt:'0.000' });
+    blankRow(state);
+    sectionHeader(ws, state, colBase, 'LITROS SEGÚN MITERS');
+    tableHeader(ws, state, colBase, 'LADO','LITROS','TOTAL LITROS');
+    (e.hoses||[]).forEach((h,i) => dataRow(ws, state, colBase, h.lado, round3(h.litros), i===0 ? round3(e.totalUnidades) : '', { fillA: i===0 ? COL.PINK : null, numFmtB:'0.000', numFmtC:'0.000' }));
+    blankRow(state);
+    labelRow(ws, state, colBase, 'MONTO NACIONAL Bs.', round2(e.montoNac), { fill: COL.PINK, numFmt:'0.00' });
+    labelRow(ws, state, colBase, 'MONTO DIFERENCIAL Bs.', round2(e.montoDif), { fill: COL.PINK, numFmt:'0.00' });
+    labelRow(ws, state, colBase, 'TOTAL Bs.', round2(e.esperado), { fill: COL.YELLOW, valueBold:true, valueFill: COL.YELLOW, numFmt:'0.00' });
+  }
+
+  blankRow(state);
+  sectionHeader(ws, state, colBase, 'P O S');
+  labelRow(ws, state, colBase, 'P O S', round2(e.pos), { numFmt:'0.00' });
+  blankRow(state);
+  sectionHeader(ws, state, colBase, 'EFECTIVO');
+  tableHeader(ws, state, colBase, 'CORTES','CANTIDAD','IMPORTE Bs.');
+  (e.denominaciones||[]).forEach(d => dataRow(ws, state, colBase, round2(d.denom), d.cantidad, round2(d.importe), { numFmtA:'0.00', numFmtC:'0.00' }));
+  blankRow(state);
+  labelRow(ws, state, colBase, 'TOTAL EFECTIVO Y POS', round2(e.totalContado), { fill: COL.YELLOW, valueBold:true, valueFill: COL.YELLOW, numFmt:'0.00' });
+  labelRow(ws, state, colBase, 'DIFERENCIA', round2(e.diff), { fill: COL.YELLOW, valueBold:true, valueFill: COL.YELLOW, numFmt:'0.00' });
+  if (e.justificacion) labelRow(ws, state, colBase, 'JUSTIFICACIÓN', e.justificacion);
+}
+
+function anchoColumnasBloques(ws, totalCols){
+  for (let c = 1; c <= totalCols; c++){
+    const mod = (c - 1) % 4;
+    ws.getColumn(c).width = (mod === 3) ? 3 : (mod === 0 ? 11 : 15);
+  }
+}
+
+async function exportarFormatoOperador(){
+  const hist = loadHistorial();
+  if (hist.length === 0){ alert('No hay arqueos guardados para exportar.'); return; }
+
+  const grupos = {};
+  const ordenGrupos = [];
+  hist.forEach(e => {
+    const key = e.fecha + '||' + e.turno;
+    if (!grupos[key]){ grupos[key] = []; ordenGrupos.push(key); }
+    grupos[key].push(e);
+  });
+
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet('Planilla Consolidada');
+  let rowCursor = 1;
+  let maxColUsed = 3;
+
+  ordenGrupos.forEach(key => {
+    const [fecha, turno] = key.split('||');
+    const entries = grupos[key];
+    const totalCols = Math.max(entries.length * 4 - 1, 3);
+
+    ws.mergeCells(rowCursor, 1, rowCursor, totalCols);
+    wcell(ws, rowCursor, 1, `TURNO ${(turno||'').toUpperCase()} — ${fechaDDMMYYYY(fecha)}`, { bold:true, size:14, fill: COL.GREEN });
+    rowCursor += 2;
+
+    const states = entries.map(() => ({ row: rowCursor }));
+    entries.forEach((entry, idx) => buildBloqueStyled(ws, states[idx], 1 + idx*4, entry));
+
+    rowCursor = Math.max(...states.map(s => s.row)) + 2;
+    if (totalCols > maxColUsed) maxColUsed = totalCols;
+  });
+
+  anchoColumnasBloques(ws, maxColUsed);
+
+  const fechasUnicas = [...new Set(hist.map(e => e.fecha))].sort();
+  const productosUnicos = [...new Set(hist.map(e => (e.producto||'').toUpperCase()))];
+
+  const fechaParte = fechasUnicas.length === 1
+    ? fechaDDMMYYYY(fechasUnicas[0])
+    : `${fechaDDMMYYYY(fechasUnicas[0])}_a_${fechaDDMMYYYY(fechasUnicas[fechasUnicas.length - 1])}`;
+  const productoParte = productosUnicos.join('-');
+
+  // Corrección de nombre del archivo: Prefijo PLANILLA_CONSOLIDADA_ para diferenciarlo claramente
+  const nombreArchivo = `PLANILLA_CONSOLIDADA_${STATION_CODE}_${fechaParte}_${productoParte}.xlsx`;
+  await descargarWorkbook(workbook, nombreArchivo);
+}
+
+async function exportarArqueoIndividual(entry){
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet('Arqueo');
+  let rowCursor = 1;
+
+  ws.mergeCells(rowCursor, 1, rowCursor, 3);
+  wcell(ws, rowCursor, 1, `TURNO ${(entry.turno||'').toUpperCase()} — ${fechaDDMMYYYY(entry.fecha)}`, { bold:true, size:14, fill: COL.GREEN });
+  rowCursor += 2;
+
+  const state = { row: rowCursor };
+  buildBloqueStyled(ws, state, 1, entry);
+  anchoColumnasBloques(ws, 3);
+
+  const nombreArchivo = `${STATION_CODE}_${fechaDDMMYYYY(entry.fecha)}_${(entry.producto||'').toUpperCase()}_${sanitizeNombre(entry.nombre)}.xlsx`;
+  await descargarWorkbook(workbook, nombreArchivo);
+}
+
+document.getElementById('btn-exportar-operador').addEventListener('click', exportarFormatoOperador);
+
+renderHistorial();
+</script>
+
+</body>
+</html>
