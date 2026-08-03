@@ -27,14 +27,6 @@
     --radius: 14px;
   }
   *{box-sizing:border-box;}
-  .share-overlay{ position:fixed; inset:0; background:rgba(0,0,0,0.55); display:flex; align-items:flex-end; justify-content:center; z-index:9999; }
-  .share-card{ background:var(--panel); border:1px solid var(--line); border-radius:16px 16px 0 0; padding:20px 18px 26px; width:100%; max-width:480px; box-shadow:0 -4px 20px rgba(0,0,0,0.4); }
-  .share-card h3{ margin:0 0 4px; font-size:15px; color:var(--text); }
-  .share-card p{ margin:0 0 16px; font-size:13px; color:var(--muted); word-break:break-all; }
-  .share-card .share-btns{ display:flex; gap:10px; }
-  .share-card button{ flex:1; padding:12px; font-size:14px; border-radius:10px; }
-  .share-btn-primary{ background:var(--pos); border:none; color:#0a0d0f; font-weight:700; }
-  .share-btn-secondary{ background:var(--panel2); border:1px solid var(--line); color:var(--text); }
   body{ margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif; padding-bottom:40px; }
   header{ padding:18px 16px 10px; text-align:center; border-bottom:1px solid var(--line); background:linear-gradient(180deg,#181d22,#14181c); }
   header h1{ margin:0 0 6px; font-size:18px; letter-spacing:0.5px; font-weight:700; text-transform:uppercase; }
@@ -137,6 +129,7 @@
     <option value="gnv">GNV</option>
     <option value="glp">GLP — garrafas</option>
   </select>
+  <div id="borrador-indicador" style="margin-top:8px; font-size:11px; color:var(--muted); text-align:right; min-height:14px;"></div>
 </div>
 
 <div id="panel-container"></div>
@@ -165,6 +158,7 @@ const PRECIOS = {
 };
 const DENOMS = [200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1];
 const HIST_KEY = 'arqueo_historial_v4';
+const DRAFT_KEY = 'arqueo_borrador_v1';
 
 const PRODUCTOS = {
   ge1:    { label:'GE1 — Gasolina especial', color:'var(--ge)', unit:'L', precio:PRECIOS.ge, dispensers:[{id:'GE1', hoses:['A','B']}] },
@@ -315,6 +309,123 @@ function renderPanel(key){
   document.getElementById('btn-exportar-actual').addEventListener('click', () => exportarArqueoActual(key));
 }
 
+const CAMPOS_SIMPLES_BORRADOR = [
+  'f-stock-total','f-ini-llenas','f-ini-vacias','f-recep','f-fin-llenas','f-fin-vacias',
+  'f-fact-ini','f-vales','f-calibracion','f-intl','f-nombre','f-pos','f-justif'
+];
+
+function loadBorrador(){
+  try { return JSON.parse(localStorage.getItem(DRAFT_KEY)) || {}; } catch(e){ return {}; }
+}
+function saveBorradorRaw(obj){ localStorage.setItem(DRAFT_KEY, JSON.stringify(obj)); }
+function borrarBorradorProducto(key){
+  const b = loadBorrador();
+  if (b.panels && b.panels[key]){ delete b.panels[key]; saveBorradorRaw(b); }
+}
+
+function serializarPanelActual(){
+  const state = {};
+  CAMPOS_SIMPLES_BORRADOR.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) state[id] = el.value;
+  });
+  const denoms = {};
+  document.querySelectorAll('#panel-container [data-denom]').forEach(inp => {
+    denoms[inp.dataset.denom] = inp.value;
+  });
+  state.denoms = denoms;
+  const hoses = [];
+  document.querySelectorAll('#panel-container .dispenser').forEach(disp => {
+    const dispId = disp.dataset.disp;
+    disp.querySelectorAll('.hose').forEach(hose => {
+      hoses.push({
+        disp: dispId,
+        hose: hose.dataset.hose,
+        ini: hose.querySelector('[data-role="ini"]').value,
+        fin: hose.querySelector('[data-role="fin"]').value
+      });
+    });
+  });
+  state.hoses = hoses;
+  return state;
+}
+
+function restaurarPanelActual(key, state){
+  if (!state) return;
+  CAMPOS_SIMPLES_BORRADOR.forEach(id => {
+    if (state[id] === undefined) return;
+    const el = document.getElementById(id);
+    if (el) el.value = state[id];
+  });
+  if (state.denoms){
+    document.querySelectorAll('#panel-container [data-denom]').forEach(inp => {
+      const v = state.denoms[inp.dataset.denom];
+      if (v !== undefined) inp.value = v;
+    });
+  }
+  if (state.hoses){
+    state.hoses.forEach(h => {
+      const disp = document.querySelector(`.dispenser[data-disp="${h.disp}"]`);
+      if (!disp) return;
+      const hose = disp.querySelector(`.hose[data-hose="${h.hose}"]`);
+      if (!hose) return;
+      hose.querySelector('[data-role="ini"]').value = h.ini;
+      hose.querySelector('[data-role="fin"]').value = h.fin;
+    });
+  }
+  recalcPanel(key);
+}
+
+function panelTieneDatos(state){
+  if (!state) return false;
+  for (const k of CAMPOS_SIMPLES_BORRADOR){
+    const v = state[k];
+    if (v !== undefined && String(v).trim() !== '' && String(v).trim() !== '0') return true;
+  }
+  if (state.denoms){
+    for (const k in state.denoms){
+      if (String(state.denoms[k]).trim() !== '' && String(state.denoms[k]).trim() !== '0') return true;
+    }
+  }
+  if (state.hoses){
+    for (const h of state.hoses){
+      if (String(h.ini||'').trim() !== '' && String(h.ini||'').trim() !== '0') return true;
+      if (String(h.fin||'').trim() !== '' && String(h.fin||'').trim() !== '0') return true;
+    }
+  }
+  return false;
+}
+
+function recalcularHayCambiosSinGuardar(){
+  const b = loadBorrador();
+  hayCambiosSinGuardar = b.panels ? Object.values(b.panels).some(panelTieneDatos) : false;
+}
+
+let hayCambiosSinGuardar = false;
+let borradorTimeout = null;
+function guardarBorrador(){
+  const key = document.getElementById('producto-select').value;
+  const b = loadBorrador();
+  b.meta = {
+    fecha: document.getElementById('fecha').value,
+    turno: document.getElementById('turno').value,
+    producto: key
+  };
+  b.panels = b.panels || {};
+  b.panels[key] = serializarPanelActual();
+  saveBorradorRaw(b);
+  mostrarIndicadorBorrador();
+}
+
+function mostrarIndicadorBorrador(){
+  const el = document.getElementById('borrador-indicador');
+  if (!el) return;
+  const ahora = new Date().toLocaleTimeString('es-BO', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  el.textContent = `💾 Borrador guardado automáticamente — ${ahora}`;
+  clearTimeout(borradorTimeout);
+  borradorTimeout = setTimeout(() => { el.textContent = ''; }, 3000);
+}
+
 function recalcPanel(key){
   const p = PRODUCTOS[key];
   let esperado = 0;
@@ -411,6 +522,8 @@ function recalcPanel(key){
 
 document.getElementById('panel-container').addEventListener('input', () => {
   recalcPanel(document.getElementById('producto-select').value);
+  guardarBorrador();
+  hayCambiosSinGuardar = true;
 });
 
 function esCampoEscribible(el){
@@ -439,9 +552,30 @@ document.body.addEventListener('keydown', function(e){
 
 document.getElementById('producto-select').addEventListener('change', function(){
   renderPanel(this.value);
+  const b = loadBorrador();
+  restaurarPanelActual(this.value, (b.panels || {})[this.value]);
+  guardarBorrador();
 });
 
-renderPanel('ge1');
+document.getElementById('fecha').addEventListener('change', guardarBorrador);
+document.getElementById('turno').addEventListener('change', guardarBorrador);
+
+(function inicializarConBorrador(){
+  const b = loadBorrador();
+  let productoInicial = 'ge1';
+  if (b.meta){
+    if (b.meta.fecha) document.getElementById('fecha').value = b.meta.fecha;
+    if (b.meta.turno) document.getElementById('turno').value = b.meta.turno;
+    if (b.meta.producto) productoInicial = b.meta.producto;
+  }
+  document.getElementById('producto-select').value = productoInicial;
+  renderPanel(productoInicial);
+  restaurarPanelActual(productoInicial, (b.panels || {})[productoInicial]);
+  recalcularHayCambiosSinGuardar();
+  if (b.meta || (b.panels && Object.keys(b.panels).length)){
+    mostrarIndicadorBorrador();
+  }
+})();
 
 function loadHistorial(){ try { return JSON.parse(localStorage.getItem(HIST_KEY)) || []; } catch(e){ return []; } }
 function saveHistorial(arr){ localStorage.setItem(HIST_KEY, JSON.stringify(arr)); }
@@ -548,9 +682,18 @@ function guardarArqueo(key){
   const hist = loadHistorial();
   hist.push(entry);
   saveHistorial(hist);
+  borrarBorradorProducto(key);
+  recalcularHayCambiosSinGuardar();
   renderHistorial();
   alert('Arqueo de ' + entry.productoLabel + ' guardado en el historial de este teléfono.');
 }
+
+window.addEventListener('beforeunload', function(e){
+  if (!hayCambiosSinGuardar) return;
+  e.preventDefault();
+  e.returnValue = '';
+  return '';
+});
 
 async function exportarArqueoActual(key){
   const entry = construirEntryDesdeFormulario(key);
@@ -602,7 +745,7 @@ document.getElementById('btn-borrar').addEventListener('click', function(){
   }
 });
 
-document.getElementById('btn-exportar').addEventListener('click', async function(){
+document.getElementById('btn-exportar').addEventListener('click', function(){
   const hist = loadHistorial();
   if (hist.length === 0){ alert('No hay arqueos guardados para exportar.'); return; }
   const rows = hist.map(e => ({
@@ -623,11 +766,7 @@ document.getElementById('btn-exportar').addEventListener('click', async function
   ws['!cols'] = [{wch:11},{wch:9},{wch:22},{wch:18},{wch:16},{wch:20},{wch:10},{wch:14},{wch:12},{wch:30},{wch:18},{wch:18}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Historial');
-  const filename = 'historial_arqueo_' + new Date().toISOString().slice(0,10) + '.xlsx';
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  await descargarBlob(blob, filename);
-  await ofrecerCompartir(blob, filename);
+  XLSX.writeFile(wb, 'historial_arqueo_' + new Date().toISOString().slice(0,10) + '.xlsx');
 });
 
 function round2(n){
@@ -657,37 +796,14 @@ function sanitizeNombre(n){
   return n.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'') || 'Operador';
 }
 
-async function descargarBlob(blob, filename){
+async function descargarWorkbook(workbook, filename){
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 2000);
-}
-
-function ofrecerCompartir(blob, filename){
-  const overlay = document.createElement('div');
-  overlay.className = 'share-overlay';
-  overlay.innerHTML = `
-    <div class="share-card">
-      <h3>Excel exportado y descargado ✅</h3>
-      <p>${filename}</p>
-      <p style="font-size:12px;">Los navegadores no permiten compartir archivos Excel directamente desde la página. Para enviarlo por WhatsApp, correo, etc: abre tu app <b>Archivos</b> o la carpeta <b>Descargas</b>, busca el archivo de arriba, y usa el botón "Compartir" de esa app.</p>
-      <div class="share-btns">
-        <button class="share-btn-primary" id="share-btn-cerrar" style="flex:1 1 100%;">Entendido</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  document.getElementById('share-btn-cerrar').addEventListener('click', () => {
-    if (overlay.parentNode) document.body.removeChild(overlay);
-  });
-}
-
-async function descargarWorkbook(workbook, filename){
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  await descargarBlob(blob, filename);
-  await ofrecerCompartir(blob, filename);
 }
 
 const COL = {
